@@ -161,7 +161,7 @@ void position_Ctrl_Task()
 void user_Ctrl_Task()
 {
   tTemp = micros();
-  _externalSetpoint = consigneExterne.getValuePercent(); //TODO AGC -> Should be here, but it seem analog read into interrupt dont work...Use continous ADC Read?
+  _externalSetpoint = consigneExterne.getValuePercent();
 
   //Récupération de la commande
   if(Serial.available())
@@ -241,8 +241,6 @@ void HandlerTickTaskSoft() {
 
 void setup()
 {
-  analogReadResolution(12);
-
   interrupts(); 
 
   setupFanInterrupts();
