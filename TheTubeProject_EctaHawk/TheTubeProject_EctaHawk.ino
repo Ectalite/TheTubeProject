@@ -9,6 +9,15 @@
 #include "NRF52_MBED_TimerInterrupt.h" // To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
 #include "NRF52_MBED_ISR_Timer.h" // To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
 #include <SimpleTimer.h>
+#include <ArduinoBLE.h>
+
+/*********************************************************
+           BLE
+**********************************************************/
+BLEService ledService("19B10000-E8F2-537E-4F6C-D104768A1214"); // Bluetooth® Low Energy LED Service
+
+// Bluetooth® Low Energy LED Switch Characteristic - custom 128-bit UUID, read and writable by central
+BLEByteCharacteristic switchCharacteristic("19B10001-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite);
 
 /*********************************************************
            INSTANCIATION DES PERIPHERIQUES
@@ -85,6 +94,27 @@ void setupFanInterrupts()
 
   pinMode(secondaryFan.getHallPinNumber(), INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(secondaryFan.getHallPinNumber()), SecondaryFan_incRpmCounter, CHANGE);
+}
+
+void setupBLE()
+{
+  // set advertised local name and service UUID:
+  BLE.setLocalName("TheTube");
+  BLE.setAdvertisedService(ledService);
+
+  // add the characteristic to the service
+  ledService.addCharacteristic(switchCharacteristic);
+
+  // add service
+  BLE.addService(ledService);
+
+  // set the initial value for the characeristic:
+  switchCharacteristic.writeValue(0);
+
+  // start advertising
+  BLE.advertise();
+
+  Serial.println("BLE LED Peripheral");
 }
 
 /*********************************************************
@@ -221,6 +251,7 @@ void HandlerTickTaskHard()
   // No Serial.print() can be used
 
   speed_Ctrl_Task();
+  //BLE_task();
   
   if(counter % POS_TASK_MUL)
   {
@@ -252,59 +283,46 @@ void setup()
   timer.setInterval(SPEED_TASK_PERIOD_MS*USER_TASK_MUL, HandlerTickTaskSoft);
   
   Serial.begin(115200);
+
+  // begin initialization
+  if (!BLE.begin()) {
+    Serial.println("starting Bluetooth® Low Energy module failed!");
+
+    while (1);
+  }
+
+  setupBLE();
 }
 
 void loop() //monitoring_Task
 {
-  tTemp = micros();
-  timer.run();
- 
-  mainFan.enableRotation(start);
-  secondaryFan.enableRotation(start);
+  // listen for Bluetooth® Low Energy peripherals to connect:
+  BLEDevice central = BLE.central();
 
-  if(start)
-  {
-    if(ramp)
-    {
-      i++;
-      setpointRPM =i*1000;
-      i = (setpointRPM> 16000) ? 0 : i;
-    }
-    else
-    {
-      setpointRPM = 3500+((consigneExterne.getValuePercent()/100)*(14500-3500));
+  mainFan.enableRotation(start);
+  secondaryFan.enableRotation(false);
+
+  // if a central is connected to peripheral:
+  if (central) {
+    Serial.print("Connected to central: ");
+    // print the central's MAC address:
+    Serial.println(central.address());
+
+    // while the central is still connected to peripheral:
+    while (central.connected()) {
+      //tTemp = micros();
+      //timer.run();
+
+      // if the remote device wrote to the characteristic,
+      // use the value to control the LED:
+      mainFan.setSpeed(switchCharacteristic.value());
     }
   }
   else
   {
-    setpointRPM = 0;
-  }
-  realSetpoint = mainFan.setSpeed(setpointRPM);
-  secondaryFan.setSpeed(8000);
-
-
- #ifdef MONITOR
-  Serial.print ("cons_ext.:");
-  Serial.print (_externalSetpoint, 1);
-  Serial.print (",MainFanRpm:");
-  Serial.print (_mainFanSpeed, 0);
-  Serial.print (",SecondaryFanRpm:");
-  Serial.print (_secondaryFanSpeed, 0);
-  Serial.print (",setpointRPM:");
-  Serial.print (setpointRPM, DEC);
-  Serial.print (",realSetpoint:");
-  Serial.print (realSetpoint, DEC);
-  Serial.print (",HS_value:");
-  Serial.print (_plotHeight,1);
-  Serial.print ("\r\n");
-  Serial.println ("Application timings: ");
-  Serial.println ("Speed Task: "+String(float(tExecSpeedTask)/1000)+" ms");
-  Serial.println ("Pos Task: "+String(float(tExecPosTask)/1000)+" ms");
-  Serial.println ("User Task: "+String(float(tExecUserTask)/1000)+" ms");
-  Serial.println ("Monitoring Task: "+String(float(tExecMonTask)/1000)+" ms");
-#endif
-  tExecMonTask = micros() - tTemp;
-
-  delay(SPEED_TASK_PERIOD_MS*MON_TASK_MUL);
- 
+    tTemp = micros();
+    timer.run();
+  
+    mainFan.setSpeed(0);
+  }  
 }
