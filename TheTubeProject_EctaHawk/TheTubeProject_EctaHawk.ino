@@ -14,10 +14,8 @@
 /*********************************************************
            BLE
 **********************************************************/
-BLEService ledService("19B10000-E8F2-537E-4F6C-D104768A1214"); // Bluetooth® Low Energy LED Service
-
-// Bluetooth® Low Energy LED Switch Characteristic - custom 128-bit UUID, read and writable by central
-BLEByteCharacteristic switchCharacteristic("19B10001-E8F2-537E-4F6C-D104768A1214", BLERead | BLEWrite);
+BLEService fanService("1101");
+BLEIntCharacteristic fanSpeedCharacteristic("2101", BLERead | BLEWrite);
 
 /*********************************************************
            INSTANCIATION DES PERIPHERIQUES
@@ -98,23 +96,22 @@ void setupFanInterrupts()
 
 void setupBLE()
 {
-  // set advertised local name and service UUID:
-  BLE.setLocalName("TheTube");
-  BLE.setAdvertisedService(ledService);
+  if (!BLE.begin()) {
+  Serial.println("Erreur lors de l'initialisation du BLE !");
+  while (1);
+}
 
-  // add the characteristic to the service
-  ledService.addCharacteristic(switchCharacteristic);
+BLE.setLocalName("Ventilateur");
+BLE.setAdvertisedService(fanService);
 
-  // add service
-  BLE.addService(ledService);
+fanService.addCharacteristic(fanSpeedCharacteristic);
 
-  // set the initial value for the characeristic:
-  switchCharacteristic.writeValue(0);
+BLE.addService(fanService);
 
-  // start advertising
-  BLE.advertise();
+fanSpeedCharacteristic.writeValue(0); // Initialisation de la valeur de la vitesse du ventilateur
 
-  Serial.println("BLE LED Peripheral");
+BLE.advertise();
+Serial.println("Prêt à accepter les connexions");
 }
 
 /*********************************************************
@@ -299,30 +296,20 @@ void loop() //monitoring_Task
   // listen for Bluetooth® Low Energy peripherals to connect:
   BLEDevice central = BLE.central();
 
-  mainFan.enableRotation(start);
-  secondaryFan.enableRotation(false);
-
-  // if a central is connected to peripheral:
   if (central) {
-    Serial.print("Connected to central: ");
-    // print the central's MAC address:
+    Serial.print("Connecté à l'appareil central : ");
     Serial.println(central.address());
 
-    // while the central is still connected to peripheral:
     while (central.connected()) {
-      //tTemp = micros();
-      //timer.run();
-
-      // if the remote device wrote to the characteristic,
-      // use the value to control the LED:
-      mainFan.setSpeed(switchCharacteristic.value());
+      if (fanSpeedCharacteristic.written()) {
+        int newFanSpeed = fanSpeedCharacteristic.value();
+        realSetpoint = mainFan.setSpeed(newFanSpeed);
+        Serial.print("Nouvelle vitesse du ventilateur principal : ");
+        Serial.println(newFanSpeed);
+      }
     }
+
+    Serial.print("Déconnecté de l'appareil central : ");
+    Serial.println(central.address());
   }
-  else
-  {
-    tTemp = micros();
-    timer.run();
-  
-    mainFan.setSpeed(0);
-  }  
 }
