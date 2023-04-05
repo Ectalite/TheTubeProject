@@ -7,6 +7,7 @@ HCSR04::HCSR04(byte trigPin, byte echoPin)
 { 
   _trigPin = trigPin;
   _echoPin = echoPin;
+  _duration = 0;
 
   pinMode(_trigPin, OUTPUT); // Sets the trigPin as an Output
   pinMode(_echoPin, INPUT); // Sets the echoPin as an Input
@@ -22,15 +23,16 @@ float HCSR04::measureDistance()
   delayMicroseconds(10);
   digitalWrite(_trigPin, LOW);
   // Reads the echoPin, returns the sound wave travel time in microseconds
-  _duration = pulseIn(_echoPin, HIGH, meas_timout);
+  _duration = pulseIn(_echoPin, HIGH, meas_timout);  
   // Calculating the distance
   return _duration * meas_factor;
 }
 
-float HCSR04::heightPercentToCm(float heightPercent) {
+float HCSR04::heightInCm() {
+  float fmesure = measureDistance();
   for (int i = 0; i < tableSize - 1; i++) {
-    if (heightPercent >= heightTable[i].heightPercent && heightPercent <= heightTable[i + 1].heightPercent) {
-      float t = (heightPercent - heightTable[i].heightPercent) / (heightTable[i + 1].heightPercent - heightTable[i].heightPercent);
+    if (fmesure >= heightTable[i].heightPercent && fmesure <= heightTable[i + 1].heightPercent) {
+      float t = (fmesure - heightTable[i].heightPercent) / (heightTable[i + 1].heightPercent - heightTable[i].heightPercent);
       return heightTable[i].heightCm + t * (heightTable[i + 1].heightCm - heightTable[i].heightCm);
     }
   }

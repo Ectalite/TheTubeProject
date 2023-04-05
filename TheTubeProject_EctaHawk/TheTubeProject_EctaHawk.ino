@@ -31,8 +31,8 @@ String command;
 
 float _mainFanSpeed;
 float _secondaryFanSpeed;
-float _plotHeightCm;
-float _plotHeightPercent;
+float plotHeightCm;
+float plotHeightPercent;
 float _externalSetpoint;
 
 long int tExecSpeedTask;
@@ -202,11 +202,11 @@ void position_Ctrl_Task()
 {
   tTemp = micros();
   //Inputs
-  _plotHeight = heightSensor.measureDistance();
+  plotHeightPercent = heightSensor.measureDistance();
  
   //Compute
   // Calcul de la distance en cm en utilisant l'équation de droite
-  _plotHeightCm = heightPercentToCm(heightSensor.measureDistance());
+  plotHeightCm = heightSensor.heightInCm();
   //Ouput
 
   tExecPosTask = micros() - tTemp;
@@ -295,8 +295,10 @@ void monitoring_Task()
   Serial.print (setpointRPM, DEC);
   Serial.print (",realSetpoint:");
   Serial.print (realSetpoint, DEC);
-  Serial.print (",HS_value:");
-  Serial.print (_plotHeight,1);
+  Serial.print (",HauteurCM:");
+  Serial.print (plotHeightCm,1);
+  Serial.print (",HauteurPercent:");
+  Serial.print (plotHeightPercent,1);
   Serial.print ("\r\n");
 #endif
 
