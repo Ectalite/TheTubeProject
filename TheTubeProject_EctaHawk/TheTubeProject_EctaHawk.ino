@@ -31,7 +31,8 @@ String command;
 
 float _mainFanSpeed;
 float _secondaryFanSpeed;
-float _plotHeight;
+float _plotHeightCm;
+float _plotHeightPercent;
 float _externalSetpoint;
 
 long int tExecSpeedTask;
@@ -176,7 +177,6 @@ NB: D'autre tâches peuvent apparaître au cours du projet, il s'agit ici de la 
 
 void speed_Ctrl_Task()
 {
-  //Inputs
   tTemp = micros();
   _mainFanSpeed = mainFan.computeSpeedRPM();
   _secondaryFanSpeed = secondaryFan.computeSpeedRPM();
@@ -205,7 +205,8 @@ void position_Ctrl_Task()
   _plotHeight = heightSensor.measureDistance();
  
   //Compute
-
+  // Calcul de la distance en cm en utilisant l'équation de droite
+  _plotHeightCm = heightPercentToCm(heightSensor.measureDistance());
   //Ouput
 
   tExecPosTask = micros() - tTemp;
