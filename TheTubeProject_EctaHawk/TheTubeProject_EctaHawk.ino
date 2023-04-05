@@ -276,7 +276,7 @@ void user_Ctrl_Task()
   tExecUserTask = micros() - tTemp;
 }
 
-//#define MONITOR 
+#define MONITOR 
 //#define PLOT_TIMINGS
 
 //monitoring_Task
@@ -336,7 +336,7 @@ void BLETask()
 #define MONITORING_TASK_PERIOD_MS 100
 
 //Calcul de la période de la tâche
-#define TIMER_TASK_US (SPEED_TASK_PERIOD_MS+POS_TASK_PERIOD_MS)*1000 //Périodes des tâches SPEED et POSITION convertit en microsecondes.
+#define TIMER_TASK_US (SPEED_TASK_PERIOD_MS+POS_TASK_PERIOD_MS) //Périodes des tâches SPEED et POSITION convertit en microsecondes.
 
 // the soft timer object
 SimpleTimer timerTask;
@@ -352,7 +352,7 @@ void HandlerTickTask()
 }
 
 void HandlerTickMonitor() {
-  //user_Ctrl_Task();
+  user_Ctrl_Task();
 
   monitoring_Task();
 }
@@ -371,7 +371,7 @@ void setup()
   setupFanInterrupts();
 
   timerTask.setInterval(TIMER_TASK_US, HandlerTickTask); 
-  timerMonitor.setInterval(MONITORING_TASK_PERIOD_MS*1000, HandlerTickMonitor);
+  timerMonitor.setInterval(MONITORING_TASK_PERIOD_MS, HandlerTickMonitor);
   
   Serial.begin(115200);
 
