@@ -11,12 +11,13 @@ class FanManager
   public:
   FanManager(byte fanPWMPin, byte fanHallSensorPin, byte fanEnablePin, byte CurrentMeasPin);
   int     setSpeed(float speedRPM);
+  void    setSpeedProp(float speedProp);
   float   getPWMRatio();
-  int  computeSpeedRPM();
-  int computeCurrentmA();
-  void enableRotation(bool state);
-  void  incRpmCounter(); //Called by interupt on HallSensorPin
-  byte getHallPinNumber();
+  int     computeSpeedRPM();
+  int     computeCurrentmA();
+  void    enableRotation(bool state);
+  void    incRpmCounter(); //Called by interupt on HallSensorPin
+  byte    getHallPinNumber();
  
 
   private:

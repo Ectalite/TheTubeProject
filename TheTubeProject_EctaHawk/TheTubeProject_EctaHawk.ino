@@ -9,6 +9,13 @@
 #include "NRF52_MBED_TimerInterrupt.h" // To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
 #include "NRF52_MBED_ISR_Timer.h" // To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
 #include <SimpleTimer.h>
+#include <ArduinoBLE.h>
+
+/*********************************************************
+           BLE
+**********************************************************/
+BLEService fanService("1101");
+BLEIntCharacteristic fanSpeedCharacteristic("2101", BLERead | BLEWrite);
 
 /*********************************************************
            INSTANCIATION DES PERIPHERIQUES
@@ -86,6 +93,26 @@ void setupFanInterrupts()
 
   pinMode(secondaryFan.getHallPinNumber(), INPUT_PULLUP);
   attachInterrupt(digitalPinToInterrupt(secondaryFan.getHallPinNumber()), SecondaryFan_incRpmCounter, CHANGE);
+}
+
+void setupBLE()
+{
+  if (!BLE.begin()) {
+  Serial.println("Erreur lors de l'initialisation du BLE !");
+  while (1);
+}
+
+BLE.setLocalName("Ventilateur");
+BLE.setAdvertisedService(fanService);
+
+fanService.addCharacteristic(fanSpeedCharacteristic);
+
+BLE.addService(fanService);
+
+fanSpeedCharacteristic.writeValue(0); // Initialisation de la valeur de la vitesse du ventilateur
+
+BLE.advertise();
+Serial.println("Prêt à accepter les connexions");
 }
 
 /*********************************************************
@@ -225,6 +252,7 @@ void HandlerTickTaskHard()
   // No Serial.print() can be used
 
   speed_Ctrl_Task();
+  //BLE_task();
   
   if(counter % POS_TASK_MUL)
   {
@@ -256,61 +284,36 @@ void setup()
   timer.setInterval(SPEED_TASK_PERIOD_MS*USER_TASK_MUL, HandlerTickTaskSoft);
   
   Serial.begin(115200);
+
+  // begin initialization
+  if (!BLE.begin()) {
+    Serial.println("starting Bluetooth® Low Energy module failed!");
+
+    while (1);
+  }
+
+  setupBLE();
 }
 
 void loop() //monitoring_Task
 {
-  tTemp = micros();
-  timer.run();
- 
-  mainFan.enableRotation(start);
-  secondaryFan.enableRotation(start);
+  // listen for Bluetooth® Low Energy peripherals to connect:
+  BLEDevice central = BLE.central();
 
-  if(start)
-  {
-    if(ramp)
-    {
-      i++;
-      setpointRPM =i*1000;
-      i = (setpointRPM> 16000) ? 0 : i;
+  if (central) {
+    Serial.print("Connecté à l'appareil central : ");
+    Serial.println(central.address());
+
+    while (central.connected()) {
+      if (fanSpeedCharacteristic.written()) {
+        int newFanSpeed = fanSpeedCharacteristic.value();
+        realSetpoint = mainFan.setSpeed(newFanSpeed);
+        Serial.print("Nouvelle vitesse du ventilateur principal : ");
+        Serial.println(newFanSpeed);
+      }
     }
-    else
-    {
-      setpointRPM = 3500+((consigneExterne.getValuePercent()/100)*(14500-3500));
-    }
+
+    Serial.print("Déconnecté de l'appareil central : ");
+    Serial.println(central.address());
   }
-  else
-  {
-    setpointRPM = 0;
-  }
-  realSetpoint = mainFan.setSpeed(setpointRPM);
-  secondaryFan.setSpeed(8000);
-
-
- #ifdef MONITOR
-  Serial.print ("cons_ext.:");
-  Serial.print (_externalSetpoint, 1);
-  Serial.print (",MainFanRpm:");
-  Serial.print (_mainFanSpeed, 0);
-  Serial.print (",SecondaryFanRpm:");
-  Serial.print (_secondaryFanSpeed, 0);
-  Serial.print (",setpointRPM:");
-  Serial.print (setpointRPM, DEC);
-  Serial.print (",realSetpoint:");
-  Serial.print (realSetpoint, DEC);
-  Serial.print (",HeightCM_value:");
-  Serial.print (_plotHeightCm,1);
-  Serial.print (",HeightPercent_value:");
-  Serial.print (_plotHeightPercent,1);
-  Serial.print ("\r\n");
-  Serial.println ("Application timings: ");
-  Serial.println ("Speed Task: "+String(float(tExecSpeedTask)/1000)+" ms");
-  Serial.println ("Pos Task: "+String(float(tExecPosTask)/1000)+" ms");
-  Serial.println ("User Task: "+String(float(tExecUserTask)/1000)+" ms");
-  Serial.println ("Monitoring Task: "+String(float(tExecMonTask)/1000)+" ms");
-#endif
-  tExecMonTask = micros() - tTemp;
-
-  delay(SPEED_TASK_PERIOD_MS*MON_TASK_MUL);
- 
 }
