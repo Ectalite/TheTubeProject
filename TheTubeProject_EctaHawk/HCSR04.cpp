@@ -26,3 +26,13 @@ float HCSR04::measureDistance()
   // Calculating the distance
   return _duration * meas_factor;
 }
+
+float HCSR04::heightPercentToCm(float heightPercent) {
+  for (int i = 0; i < tableSize - 1; i++) {
+    if (heightPercent >= heightTable[i].heightPercent && heightPercent <= heightTable[i + 1].heightPercent) {
+      float t = (heightPercent - heightTable[i].heightPercent) / (heightTable[i + 1].heightPercent - heightTable[i].heightPercent);
+      return heightTable[i].heightCm + t * (heightTable[i + 1].heightCm - heightTable[i].heightCm);
+    }
+  }
+  return -1; // Retournez -1 en cas d'erreur (par exemple, si heightPercent est en dehors des limites du tableau)
+}
