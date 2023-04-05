@@ -6,8 +6,8 @@
 #include "FanManager.h"
 #include "Potentiometer.h"
 #include "HCSR04.h"
-#include "NRF52_MBED_TimerInterrupt.h" // To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
-#include "NRF52_MBED_ISR_Timer.h" // To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
+//#include "NRF52_MBED_TimerInterrupt.h" // To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
+//#include "NRF52_MBED_ISR_Timer.h" // To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
 #include <SimpleTimer.h>
 #include <ArduinoBLE.h>
 
@@ -20,6 +20,8 @@ BLEIntCharacteristic fanSpeedCharacteristic("2101", BLERead | BLEWrite);
 /*********************************************************
            INSTANCIATION DES PERIPHERIQUES
 **********************************************************/
+float _fan2Setpoint=0.5;
+float _Quiet=LOW;
 int i=0;
 bool start = true;
 bool ramp = false;
@@ -37,6 +39,9 @@ long int tExecPosTask;
 long int tExecUserTask;
 long int tExecMonTask;
 long int tTemp;
+
+//BLE
+BLEDevice central;
 
 #define MainFanEnablPin D2
 #define MainFanPWMPin D3
@@ -95,23 +100,24 @@ void setupFanInterrupts()
 }
 
 void setupBLE()
-{
-  if (!BLE.begin()) {
-  Serial.println("Erreur lors de l'initialisation du BLE !");
-  while (1);
-}
+{ 
+  if (!BLE.begin()) 
+  {
+    Serial.println("Erreur lors de l'initialisation du BLE !");
+    while (1);
+  }
 
-BLE.setLocalName("Ventilateur");
-BLE.setAdvertisedService(fanService);
+  BLE.setLocalName("Ventilateur");
+  BLE.setAdvertisedService(fanService);
 
-fanService.addCharacteristic(fanSpeedCharacteristic);
+  fanService.addCharacteristic(fanSpeedCharacteristic);
 
-BLE.addService(fanService);
+  BLE.addService(fanService);
 
-fanSpeedCharacteristic.writeValue(0); // Initialisation de la valeur de la vitesse du ventilateur
+  fanSpeedCharacteristic.writeValue(0); // Initialisation de la valeur de la vitesse du ventilateur
 
-BLE.advertise();
-Serial.println("Prêt à accepter les connexions");
+  BLE.advertise();
+  Serial.println("Prêt à accepter les connexions");
 }
 
 /*********************************************************
@@ -170,18 +176,38 @@ NB: D'autre tâches peuvent apparaître au cours du projet, il s'agit ici de la 
 
 void speed_Ctrl_Task()
 {
+  //Inputs
   tTemp = micros();
   _mainFanSpeed = mainFan.computeSpeedRPM();
   _secondaryFanSpeed = secondaryFan.computeSpeedRPM();
-  //TODO
+  //Compute
+  if(!start)
+  {
+    mainFan.setSpeedProp(0);
+    secondaryFan.setSpeedProp(0);
+  }
+  else
+  {
+    mainFan.setSpeedProp(float(_externalSetpoint/100));
+    secondaryFan.setSpeedProp(_fan2Setpoint);
+  }
+
+  //Output
+  mainFan.enableRotation(!_Quiet);
+  secondaryFan.enableRotation(!_Quiet);
   tExecSpeedTask = micros() - tTemp;
 }
 
 void position_Ctrl_Task()
 {
   tTemp = micros();
+  //Inputs
   _plotHeight = heightSensor.measureDistance();
-  //TODO
+ 
+  //Compute
+
+  //Ouput
+
   tExecPosTask = micros() - tTemp;
 }
 
@@ -219,6 +245,26 @@ void user_Ctrl_Task()
     {
       NVIC_SystemReset();                         // Reset the microcontroller
     }
+        else if(command.indexOf("Kp") == 0) //The command format must be Kp=xx.xx
+    {
+      //Kp=command.substring(3).toDouble();
+    }
+    else if(command.indexOf("Ki") == 0) //The command format must be Ki=xx.xx
+    {
+      //Ki=command.substring(3).toDouble();
+    }
+    else if(command.indexOf("Kd") == 0) //The command format must be Kd=xx.xx
+    {
+      //Kd=command.substring(3).toDouble();
+    }
+    else if(command.indexOf("Fan2") == 0) //The command format must be Fan2=xx.xx
+    {
+      _fan2Setpoint=command.substring(5).toDouble();
+    }
+     else if(command.equals("Quiet")) 
+    {
+      _Quiet=!_Quiet;
+    }
     else
     {
       Serial.println("Invalid command");
@@ -229,6 +275,61 @@ void user_Ctrl_Task()
   tExecUserTask = micros() - tTemp;
 }
 
+//#define MONITOR 
+//#define PLOT_TIMINGS
+
+//monitoring_Task
+void monitoring_Task()
+{
+  tTemp = micros();
+    
+#ifdef MONITOR
+  Serial.print ("cons_ext.:");
+  Serial.print (_externalSetpoint, 1);
+  Serial.print (",MainFanRpm:");
+  Serial.print (_mainFanSpeed, 0);
+  Serial.print (",SecondaryFanRpm:");
+  Serial.print (_secondaryFanSpeed, 0);
+  Serial.print (",setpointRPM:");
+  Serial.print (setpointRPM, DEC);
+  Serial.print (",realSetpoint:");
+  Serial.print (realSetpoint, DEC);
+  Serial.print (",HS_value:");
+  Serial.print (_plotHeight,1);
+  Serial.print ("\r\n");
+#endif
+
+#ifdef PLOT_TIMINGS
+  Serial.println ("Application timings: ");
+  Serial.println ("Speed Task: "+String(float(tExecSpeedTask)/1000)+" ms");
+  Serial.println ("Pos Task: "+String(float(tExecPosTask)/1000)+" ms");
+  Serial.println ("User Task: "+String(float(tExecUserTask)/1000)+" ms");
+  Serial.println ("Monitoring Task: "+String(float(tExecMonTask)/1000)+" ms");
+#endif
+
+    tExecMonTask = micros() - tTemp;
+}
+
+void BLETask()
+{
+  if (central) {
+    if (central.connected()) {
+      if (fanSpeedCharacteristic.written()) {
+        int newFanSpeed = fanSpeedCharacteristic.value();
+        realSetpoint = mainFan.setSpeed(newFanSpeed);
+        Serial.print("Nouvelle vitesse du ventilateur principal : ");
+        Serial.println(newFanSpeed);
+      }
+    }
+  }
+  else
+  {
+    central = BLE.central();
+  }
+}
+
+#define SPEED_TASK_PERIOD_MS 20
+
 #define SPEED_TASK_PERIOD_MS 200
 #define POS_TASK_MUL  2 //Give position task time = POS_TASK_MUL*SPEED_TASK_PERIOD
 #define USER_TASK_MUL  4 //Give user task time = USER_TASK_MUL*SPEED_TASK_PERIOD
@@ -236,35 +337,38 @@ void user_Ctrl_Task()
 
 #define TIMER_INTERVAL_US        SPEED_TASK_PERIOD_MS*1000      // 1s = 1 000 000us
 
-// Init NRF52 hard timer NRF_TIMER3
-NRF52_MBED_Timer ITimer(NRF_TIMER_4);
 // the soft timer object
-SimpleTimer timer;
-int counter=0;
+SimpleTimer timerSoft;
+SimpleTimer timerHard;
+int counterHard=0;
+int counterSoft=0;
 
 void HandlerTickTaskHard()
 {
   // Call the different Tasks here inside ISR
-  // No Serial.print() can be used
-
-  speed_Ctrl_Task();
-  //BLE_task();
-  
-  if(counter % POS_TASK_MUL)
+  // No Serial.print() can be used 
+  if(counterHard % POS_TASK_MUL)
   {
     position_Ctrl_Task();
   }  
-  counter++;
+  counterHard++;
+
+  speed_Ctrl_Task();
 }
 
 void HandlerTickTaskSoft() {
-    user_Ctrl_Task();
+  user_Ctrl_Task();
+
+  if(counterSoft % (MON_TASK_MUL/USER_TASK_MUL))
+  {
+    monitoring_Task();
+  }  
+  counterSoft++;
 }
 
 /*********************************************************
                       APPLICATION
 **********************************************************/
-#define MONITOR 
 #define NBR_DIG 2
 
 void setup()
@@ -275,41 +379,20 @@ void setup()
 
   setupFanInterrupts();
 
-  ITimer.attachInterruptInterval(TIMER_INTERVAL_US, HandlerTickTaskHard);    
+  timerHard.setInterval(SPEED_TASK_PERIOD_MS, HandlerTickTaskHard); 
 
-  timer.setInterval(SPEED_TASK_PERIOD_MS*USER_TASK_MUL, HandlerTickTaskSoft);
+  timerSoft.setInterval(SPEED_TASK_PERIOD_MS*USER_TASK_MUL, HandlerTickTaskSoft);
   
   Serial.begin(115200);
-
-  // begin initialization
-  if (!BLE.begin()) {
-    Serial.println("starting Bluetooth® Low Energy module failed!");
-
-    while (1);
-  }
 
   setupBLE();
 }
 
-void loop() //monitoring_Task
-{
-  // listen for Bluetooth® Low Energy peripherals to connect:
-  BLEDevice central = BLE.central();
+void loop() 
+{ 
+  Serial.println("Temps d'execution speed: "+String(tExecSpeedTask));
+  Serial.println("Temps d'execution position: "+String(tExecPosTask)); 
 
-  if (central) {
-    Serial.print("Connecté à l'appareil central : ");
-    Serial.println(central.address());
-
-    while (central.connected()) {
-      if (fanSpeedCharacteristic.written()) {
-        int newFanSpeed = fanSpeedCharacteristic.value();
-        realSetpoint = mainFan.setSpeed(newFanSpeed);
-        Serial.print("Nouvelle vitesse du ventilateur principal : ");
-        Serial.println(newFanSpeed);
-      }
-    }
-
-    Serial.print("Déconnecté de l'appareil central : ");
-    Serial.println(central.address());
-  }
+  timerSoft.run();
+  timerHard.run();
 }
