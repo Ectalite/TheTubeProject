@@ -331,42 +331,30 @@ void BLETask()
   }
 }
 
-#define SPEED_TASK_PERIOD_MS 20
+#define SPEED_TASK_PERIOD_MS 43
+#define POS_TASK_PERIOD_MS 11
+#define MONITORING_TASK_PERIOD_MS 100
 
-#define SPEED_TASK_PERIOD_MS 200
-#define POS_TASK_MUL  2 //Give position task time = POS_TASK_MUL*SPEED_TASK_PERIOD
-#define USER_TASK_MUL  4 //Give user task time = USER_TASK_MUL*SPEED_TASK_PERIOD
-#define MON_TASK_MUL  8 //Give monitoring task time = MON_TASK_MUL*SPEED_TASK_PERIOD
-
-#define TIMER_INTERVAL_US        SPEED_TASK_PERIOD_MS*1000      // 1s = 1 000 000us
+//Calcul de la période de la tâche
+#define TIMER_TASK_US (SPEED_TASK_PERIOD_MS+POS_TASK_PERIOD_MS)*1000 //Périodes des tâches SPEED et POSITION convertit en microsecondes.
 
 // the soft timer object
-SimpleTimer timerSoft;
-SimpleTimer timerHard;
+SimpleTimer timerTask;
+SimpleTimer timerMonitor;
 int counterHard=0;
 int counterSoft=0;
 
-void HandlerTickTaskHard()
+void HandlerTickTask()
 {
-  // Call the different Tasks here inside ISR
-  // No Serial.print() can be used 
-  if(counterHard % POS_TASK_MUL)
-  {
-    position_Ctrl_Task();
-  }  
-  counterHard++;
-
+  //No print inside these
   speed_Ctrl_Task();
+  position_Ctrl_Task();
 }
 
-void HandlerTickTaskSoft() {
-  user_Ctrl_Task();
+void HandlerTickMonitor() {
+  //user_Ctrl_Task();
 
-  if(counterSoft % (MON_TASK_MUL/USER_TASK_MUL))
-  {
-    monitoring_Task();
-  }  
-  counterSoft++;
+  monitoring_Task();
 }
 
 /*********************************************************
@@ -382,9 +370,8 @@ void setup()
 
   setupFanInterrupts();
 
-  timerHard.setInterval(SPEED_TASK_PERIOD_MS, HandlerTickTaskHard); 
-
-  timerSoft.setInterval(SPEED_TASK_PERIOD_MS*USER_TASK_MUL, HandlerTickTaskSoft);
+  timerTask.setInterval(TIMER_TASK_US, HandlerTickTask); 
+  timerMonitor.setInterval(MONITORING_TASK_PERIOD_MS*1000, HandlerTickMonitor);
   
   Serial.begin(115200);
 
@@ -393,9 +380,9 @@ void setup()
 
 void loop() 
 { 
-  Serial.println("Temps d'execution speed: "+String(tExecSpeedTask));
-  Serial.println("Temps d'execution position: "+String(tExecPosTask)); 
+  //Serial.println("Temps d'execution speed: "+String(tExecSpeedTask));
+  //Serial.println("Temps d'execution position: "+String(tExecPosTask)); 
 
-  timerSoft.run();
-  timerHard.run();
+  timerTask.run();
+  timerMonitor.run();
 }
