@@ -6,8 +6,8 @@
 #include "FanManager.h"
 #include "Potentiometer.h"
 #include "HCSR04.h"
-#include "NRF52_MBED_TimerInterrupt.h" // To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
-#include "NRF52_MBED_ISR_Timer.h" // To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
+//#include "NRF52_MBED_TimerInterrupt.h" // To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
+//#include "NRF52_MBED_ISR_Timer.h" // To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
 #include <SimpleTimer.h>
 
 /*********************************************************
@@ -24,6 +24,8 @@ float _mainFanSpeed;
 float _secondaryFanSpeed;
 float _plotHeight;
 float _externalSetpoint;
+float _fan2Setpoint=0.5;
+float _Quiet=LOW;
 
 long int tExecSpeedTask;
 long int tExecPosTask;
@@ -141,20 +143,44 @@ monitoring_Task
 NB: D'autre tâches peuvent apparaître au cours du projet, il s'agit ici de la base de l'application.
 */
 
+#define MONITOR 
+//#define PLOT_TIMINGS
+
+
 void speed_Ctrl_Task()
 {
   tTemp = micros();
+  //Inputs
   _mainFanSpeed = mainFan.computeSpeedRPM();
   _secondaryFanSpeed = secondaryFan.computeSpeedRPM();
-  //TODO
+  //Compute
+  if(!start)
+  {
+    mainFan.setSpeedProp(0);
+    secondaryFan.setSpeedProp(0);
+  }
+  else
+  {
+    mainFan.setSpeedProp(float(_externalSetpoint/100));
+    secondaryFan.setSpeedProp(_fan2Setpoint);
+  }
+
+  //Output
+  mainFan.enableRotation(!_Quiet);
+  secondaryFan.enableRotation(!_Quiet);
   tExecSpeedTask = micros() - tTemp;
 }
 
 void position_Ctrl_Task()
 {
   tTemp = micros();
+  //Inputs
   _plotHeight = heightSensor.measureDistance();
-  //TODO
+ 
+  //Compute
+
+  //Ouput
+
   tExecPosTask = micros() - tTemp;
 }
 
@@ -171,6 +197,7 @@ void user_Ctrl_Task()
     if(command.equals("start"))
     {
       start = true;
+      _Quiet = LOW;
     }
     else if(command.equals("inc"))
     {
@@ -180,10 +207,6 @@ void user_Ctrl_Task()
     {
       i--;
     }
-    else if(command.equals("ramp"))
-    {
-      ramp = !ramp;
-    }
     else if(command.equals("stop"))
     {
       start = false;
@@ -191,6 +214,26 @@ void user_Ctrl_Task()
     else if(command.equals("reset"))
     {
       NVIC_SystemReset();                         // Reset the microcontroller
+    }
+    else if(command.indexOf("Kp") == 0) //The command format must be Kp=xx.xx
+    {
+      //Kp=command.substring(3).toDouble();
+    }
+    else if(command.indexOf("Ki") == 0) //The command format must be Ki=xx.xx
+    {
+      //Ki=command.substring(3).toDouble();
+    }
+    else if(command.indexOf("Kd") == 0) //The command format must be Kd=xx.xx
+    {
+      //Kd=command.substring(3).toDouble();
+    }
+    else if(command.indexOf("Fan2") == 0) //The command format must be Fan2=xx.xx
+    {
+      _fan2Setpoint=command.substring(5).toDouble();
+    }
+     else if(command.equals("Quiet")) 
+    {
+      _Quiet=!_Quiet;
     }
     else
     {
@@ -202,86 +245,11 @@ void user_Ctrl_Task()
   tExecUserTask = micros() - tTemp;
 }
 
-#define SPEED_TASK_PERIOD_MS 200
-#define POS_TASK_MUL  2 //Give position task time = POS_TASK_MUL*SPEED_TASK_PERIOD
-#define USER_TASK_MUL  4 //Give user task time = USER_TASK_MUL*SPEED_TASK_PERIOD
-#define MON_TASK_MUL  8 //Give monitoring task time = MON_TASK_MUL*SPEED_TASK_PERIOD
-
-#define TIMER_INTERVAL_US        SPEED_TASK_PERIOD_MS*1000      // 1s = 1 000 000us
-
-// Init NRF52 hard timer NRF_TIMER3
-NRF52_MBED_Timer ITimer(NRF_TIMER_4);
-// the soft timer object
-SimpleTimer timer;
-int counter=0;
-
-void HandlerTickTaskHard()
-{
-  // Call the different Tasks here inside ISR
-  // No Serial.print() can be used
-
-  speed_Ctrl_Task();
-  
-  if(counter % POS_TASK_MUL)
-  {
-    position_Ctrl_Task();
-  }  
-  counter++;
-}
-
-void HandlerTickTaskSoft() {
-    user_Ctrl_Task();
-}
-
-/*********************************************************
-                      APPLICATION
-**********************************************************/
-#define MONITOR 
-#define NBR_DIG 2
-
-void setup()
-{
-  interrupts(); 
-
-  setupFanInterrupts();
-
-  ITimer.attachInterruptInterval(TIMER_INTERVAL_US, HandlerTickTaskHard);    
-
-  timer.setInterval(SPEED_TASK_PERIOD_MS*USER_TASK_MUL, HandlerTickTaskSoft);
-  
-  Serial.begin(115200);
-}
-
-void loop() //monitoring_Task
+void monitoring_Task()
 {
   tTemp = micros();
-  timer.run();
- 
-  mainFan.enableRotation(start);
-  secondaryFan.enableRotation(start);
-
-  if(start)
-  {
-    if(ramp)
-    {
-      i++;
-      setpointRPM =i*1000;
-      i = (setpointRPM> 16000) ? 0 : i;
-    }
-    else
-    {
-      setpointRPM = 3500+((consigneExterne.getValuePercent()/100)*(14500-3500));
-    }
-  }
-  else
-  {
-    setpointRPM = 0;
-  }
-  realSetpoint = mainFan.setSpeed(setpointRPM);
-  secondaryFan.setSpeed(8000);
-
-
- #ifdef MONITOR
+    
+#ifdef MONITOR
   Serial.print ("cons_ext.:");
   Serial.print (_externalSetpoint, 1);
   Serial.print (",MainFanRpm:");
@@ -295,14 +263,79 @@ void loop() //monitoring_Task
   Serial.print (",HS_value:");
   Serial.print (_plotHeight,1);
   Serial.print ("\r\n");
+#endif
+
+#ifdef PLOT_TIMINGS
   Serial.println ("Application timings: ");
   Serial.println ("Speed Task: "+String(float(tExecSpeedTask)/1000)+" ms");
   Serial.println ("Pos Task: "+String(float(tExecPosTask)/1000)+" ms");
   Serial.println ("User Task: "+String(float(tExecUserTask)/1000)+" ms");
   Serial.println ("Monitoring Task: "+String(float(tExecMonTask)/1000)+" ms");
 #endif
-  tExecMonTask = micros() - tTemp;
 
-  delay(SPEED_TASK_PERIOD_MS*MON_TASK_MUL);
- 
+    tExecMonTask = micros() - tTemp;
+}
+
+#define SPEED_TASK_PERIOD_MS 20
+#define POS_TASK_MUL  2 //Give position task time = POS_TASK_MUL*SPEED_TASK_PERIOD
+#define USER_TASK_MUL  2 //Give user task time = USER_TASK_MUL*SPEED_TASK_PERIOD
+#define MON_TASK_MUL  4 //Give monitoring task time = MON_TASK_MUL*SPEED_TASK_PERIOD
+
+#define TIMER_INTERVAL_US        SPEED_TASK_PERIOD_MS*1000      // 1s = 1 000 000us
+
+// the soft timer object
+SimpleTimer timerSoft;
+SimpleTimer timerHard;
+int counterHard=0;
+int counterSoft=0;
+
+void HandlerTickTaskHard()
+{
+  // Call the different Tasks here inside ISR
+  // No Serial.print() can be used 
+  if(counterHard % POS_TASK_MUL)
+  {
+    position_Ctrl_Task();
+  }  
+  counterHard++;
+
+  speed_Ctrl_Task();
+}
+
+void HandlerTickTaskSoft() {
+  
+  user_Ctrl_Task();
+
+  if(counterSoft % (MON_TASK_MUL/USER_TASK_MUL))
+  {
+    monitoring_Task();
+  }  
+  counterSoft++;
+}
+
+/*********************************************************
+                      APPLICATION
+**********************************************************/
+
+#define NBR_DIG 2
+
+void setup()
+{
+  interrupts(); 
+
+  setupFanInterrupts();
+
+  //ITimer.attachInterruptInterval(TIMER_INTERVAL_US, HandlerTickTaskHard);    
+  timerHard.setInterval(SPEED_TASK_PERIOD_MS, HandlerTickTaskHard);
+
+  timerSoft.setInterval(SPEED_TASK_PERIOD_MS*USER_TASK_MUL, HandlerTickTaskSoft);
+  
+  Serial.begin(115200);
+  
+}
+
+void loop() //monitoring_Task
+{
+  timerSoft.run();
+  timerHard.run();
 }

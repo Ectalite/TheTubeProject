@@ -35,6 +35,11 @@ int FanManager::setSpeed(float speedRPM)
   analogWrite(_fanPWMPin, _PWMDutyCycle*255);
   return _SetpointRpm;
 }
+
+void FanManager::setSpeedProp(float speedProp)
+{
+  analogWrite(_fanPWMPin, speedProp*255);
+}
  
 void FanManager::incRpmCounter()
 //This is the function that the interupt calls
