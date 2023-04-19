@@ -33,6 +33,7 @@ float _mainFanSpeed;
 float _secondaryFanSpeed;
 float plotHeightCm;
 float plotHeightPercent;
+float HeightPercent;
 float _externalSetpoint;
 
 long int tExecSpeedTask;
@@ -58,6 +59,9 @@ BLEDevice central;
 
 #define HS_TrigPin D4
 #define HS_EchoPin D8
+
+#define MONITOR
+//Debug
 
 FanManager mainFan(MainFanPWMPin,MainFanHallPin,MainFanEnablPin,MainFanCurrentPin);
 
@@ -202,11 +206,11 @@ void position_Ctrl_Task()
 {
   tTemp = micros();
   //Inputs
-  plotHeightPercent = heightSensor.measureDistance();
- 
+  HeightPercent = heightSensor.measureDistance();
+  plotHeightPercent = HeightPercent;
   //Compute
   // Calcul de la distance en cm en utilisant l'équation de droite
-  plotHeightCm = heightSensor.heightInCm();
+  plotHeightCm = heightSensor.heightInCm(HeightPercent);
   //Ouput
 
   tExecPosTask = micros() - tTemp;
@@ -285,7 +289,7 @@ void monitoring_Task()
   tTemp = micros();
     
 #ifdef MONITOR
-  Serial.print ("cons_ext.:");
+  Serial.print (",cons_ext:");
   Serial.print (_externalSetpoint, 1);
   Serial.print (",MainFanRpm:");
   Serial.print (_mainFanSpeed, 0);
@@ -393,8 +397,9 @@ void setup()
 
 void loop() 
 { 
-  Serial.println("Temps d'execution speed: "+String(tExecSpeedTask));
-  Serial.println("Temps d'execution position: "+String(tExecPosTask)); 
+  //Calcul des timings
+  //Serial.println("Temps d'execution speed: "+String(tExecSpeedTask));
+  //Serial.println("Temps d'execution position: "+String(tExecPosTask)); 
 
   timerSoft.run();
   timerHard.run();
