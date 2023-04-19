@@ -27,6 +27,7 @@ float _mainFanSpeed;
 float _secondaryFanSpeed;
 float plotHeightCm;
 float plotHeightPercent;
+float HeightPercent;
 float _externalSetpoint;
 float _lastTrajSetpoint;
 
@@ -54,6 +55,9 @@ double Kd = 0;
 
 #define HS_TrigPin D4
 #define HS_EchoPin D8
+
+#define MONITOR
+//Debug
 
 FanManager mainFan(MainFanPWMPin,MainFanHallPin,MainFanEnablPin,MainFanCurrentPin);
 
@@ -206,12 +210,11 @@ void position_Ctrl_Task()
 {
   tTemp = micros();
   //Inputs
-  plotHeightPercent = heightSensor.measureDistance();
+  HeightPercent = heightSensor.measureDistance();
+  plotHeightPercent = HeightPercent;
   // Calcul de la distance en cm en utilisant l'équation de droite
-  plotHeightCm = heightSensor.heightInCm();
- 
+  plotHeightCm = heightSensor.heightInCm(HeightPercent);
   //Compute
-  
   
   //Ouput
 
@@ -408,6 +411,7 @@ void setup()
 
 void loop() 
 { 
+
   //Serial.println("Temps d'execution speed: "+String(tExecSpeedTask));
   //Serial.println("Temps d'execution position: "+String(tExecPosTask)); 
 

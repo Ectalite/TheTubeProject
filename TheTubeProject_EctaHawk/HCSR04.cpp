@@ -28,13 +28,26 @@ float HCSR04::measureDistance()
   return _duration * meas_factor;
 }
 
-float HCSR04::heightInCm() {
-  float fmesure = measureDistance();
-  for (int i = 0; i < tableSize - 1; i++) {
-    if (fmesure >= heightTable[i].heightPercent && fmesure <= heightTable[i + 1].heightPercent) {
+float HCSR04::heightInCm(float fmesure) {
+  for (int i = 0; i < tableSize - 1; i++) 
+  {
+    if (fmesure <= heightTable[i].heightPercent && fmesure >= heightTable[i + 1].heightPercent) 
+    {
       float t = (fmesure - heightTable[i].heightPercent) / (heightTable[i + 1].heightPercent - heightTable[i].heightPercent);
-      return heightTable[i].heightCm + t * (heightTable[i + 1].heightCm - heightTable[i].heightCm);
+      float height = heightTable[i].heightCm + t * (heightTable[i + 1].heightCm - heightTable[i].heightCm);
+      
+      return height;
     }
   }
-  return -1; // Retournez -1 en cas d'erreur (par exemple, si heightPercent est en dehors des limites du tableau)
+
+  if (fmesure > heightTable[0].heightPercent)
+  {
+    return heightTable[0].heightCm;
+  }
+  else if (fmesure < heightTable[tableSize - 1].heightPercent)
+  {
+    return heightTable[tableSize - 1].heightCm;
+  }
+
+  return -1; // Retourne -1 en cas d'erreur (si heightPercent est en dehors des limites du tableau)
 }

@@ -75,7 +75,7 @@ class HCSR04
   public:
   HCSR04(byte trigPin, byte echoPin);
   float measureDistance();
-  float heightInCm();
+  float heightInCm(float fmesure);
 
   private:  
   byte _trigPin;
