@@ -6,16 +6,7 @@
 #include "FanManager.h"
 #include "Potentiometer.h"
 #include "HCSR04.h"
-//#include "NRF52_MBED_TimerInterrupt.h" // To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
-//#include "NRF52_MBED_ISR_Timer.h" // To be included only in main(), .ino with setup() to avoid `Multiple Definitions` Linker Error
 #include <SimpleTimer.h>
-#include <ArduinoBLE.h>
-
-/*********************************************************
-           BLE
-**********************************************************/
-BLEService fanService("1101");
-BLEIntCharacteristic fanSpeedCharacteristic("2101", BLERead | BLEWrite);
 
 /*********************************************************
            INSTANCIATION DES PERIPHERIQUES
@@ -25,8 +16,11 @@ float _Quiet=LOW;
 int i=0;
 bool start = true;
 bool ramp = false;
+bool contest = false;
+bool pot = false;
+bool monitor = true;
+bool regul_vitesse = true;
 int setpointRPM;
-int realSetpoint;
 String command;
 
 float _mainFanSpeed;
@@ -34,6 +28,7 @@ float _secondaryFanSpeed;
 float plotHeightCm;
 float plotHeightPercent;
 float _externalSetpoint;
+float _lastTrajSetpoint;
 
 long int tExecSpeedTask;
 long int tExecPosTask;
@@ -41,8 +36,9 @@ long int tExecUserTask;
 long int tExecMonTask;
 long int tTemp;
 
-//BLE
-BLEDevice central;
+double Kp = 10;
+double Ki = 0;
+double Kd = 0;
 
 #define MainFanEnablPin D2
 #define MainFanPWMPin D3
@@ -100,27 +96,6 @@ void setupFanInterrupts()
   attachInterrupt(digitalPinToInterrupt(secondaryFan.getHallPinNumber()), SecondaryFan_incRpmCounter, CHANGE);
 }
 
-void setupBLE()
-{ 
-  if (!BLE.begin()) 
-  {
-    Serial.println("Erreur lors de l'initialisation du BLE !");
-    while (1);
-  }
-
-  BLE.setLocalName("Ventilateur");
-  BLE.setAdvertisedService(fanService);
-
-  fanService.addCharacteristic(fanSpeedCharacteristic);
-
-  BLE.addService(fanService);
-
-  fanSpeedCharacteristic.writeValue(0); // Initialisation de la valeur de la vitesse du ventilateur
-
-  BLE.advertise();
-  Serial.println("Prêt à accepter les connexions");
-}
-
 /*********************************************************
                GESTION DES TACHES ET TIMERS
 **********************************************************/
@@ -175,6 +150,8 @@ monitoring_Task
 NB: D'autre tâches peuvent apparaître au cours du projet, il s'agit ici de la base de l'application.
 */
 
+int integral_speed = 0;
+
 void speed_Ctrl_Task()
 {
   tTemp = micros();
@@ -188,8 +165,35 @@ void speed_Ctrl_Task()
   }
   else
   {
-    mainFan.setSpeedProp(float(_externalSetpoint/100));
-    secondaryFan.setSpeedProp(_fan2Setpoint);
+    if(contest)
+    {
+      mainFan.setSpeedProp(0);
+      secondaryFan.setSpeedProp(0);
+    }
+    else if(pot)
+    {
+      mainFan.setSpeedProp(float(_externalSetpoint/100));
+      secondaryFan.setSpeedProp(_fan2Setpoint);
+    }
+    else
+    {
+      if(regul_vitesse)
+      {
+        if(setpointRPM < 3500)
+        {
+          setpointRPM = 3500;
+        }
+        int erreur = setpointRPM - _mainFanSpeed;
+        integral_speed += erreur;
+        int vitesse = 7 * erreur + 0.25 * integral_speed;
+        mainFan.setSpeed(vitesse);
+      }
+      else
+      {
+        mainFan.setSpeed(setpointRPM);
+      }
+      secondaryFan.setSpeedProp(_fan2Setpoint);
+    }
   }
 
   //Output
@@ -203,10 +207,12 @@ void position_Ctrl_Task()
   tTemp = micros();
   //Inputs
   plotHeightPercent = heightSensor.measureDistance();
- 
-  //Compute
   // Calcul de la distance en cm en utilisant l'équation de droite
   plotHeightCm = heightSensor.heightInCm();
+ 
+  //Compute
+  
+  
   //Ouput
 
   tExecPosTask = micros() - tTemp;
@@ -225,18 +231,35 @@ void user_Ctrl_Task()
     if(command.equals("start"))
     {
       start = true;
+      Serial.println(start ? "Démarré" : "Arrêté");
     }
     else if(command.equals("inc"))
     {
       i++;
+      Serial.println("i = "+ String(i));
     }
     else if(command.equals("dec"))
     {
       i--;
+      Serial.println("i = "+ String(i));
     }
     else if(command.equals("ramp"))
     {
       ramp = !ramp;
+      String state = ramp ? "activé" : "desactivé";
+      Serial.println("Commande rampe " + state);
+    }
+    else if(command.equals("monitor"))
+    {
+      monitor = !monitor;
+      String state = monitor ? "activé" : "desactivé";
+      Serial.println("Commande monitor " + state);
+    }
+    else if(command.equals("potentiometre"))
+    {
+      pot = !pot;
+      String state = pot ? "activé" : "desactivé";
+      Serial.println("Commande potentiomètre " + state);
     }
     else if(command.equals("stop"))
     {
@@ -246,23 +269,50 @@ void user_Ctrl_Task()
     {
       NVIC_SystemReset();                         // Reset the microcontroller
     }
-        else if(command.indexOf("Kp") == 0) //The command format must be Kp=xx.xx
+    else if(command.equals("regulation"))
     {
-      //Kp=command.substring(3).toDouble();
+      regul_vitesse = !regul_vitesse;
+      String state = regul_vitesse ? "activé" : "desactivé";
+      Serial.println("Régulation de vitesse " + state);                    
+    }
+    else if(command.indexOf("Kp") == 0) //The command format must be Kp=xx.xx
+    {
+      Kp=command.substring(3).toDouble();
+      Serial.println("Set Kp: " + String(Kp)); 
     }
     else if(command.indexOf("Ki") == 0) //The command format must be Ki=xx.xx
     {
-      //Ki=command.substring(3).toDouble();
+      Ki=command.substring(3).toDouble();
+      Serial.println("Set Ki: " + String(Ki));
     }
     else if(command.indexOf("Kd") == 0) //The command format must be Kd=xx.xx
     {
-      //Kd=command.substring(3).toDouble();
+      Kd=command.substring(3).toDouble();
+      Serial.println("Set Kd: " + String(Kd));
     }
-    else if(command.indexOf("Fan2") == 0) //The command format must be Fan2=xx.xx
+    else if(command.indexOf("fan1") == 0) //The command format must be fan1=xx in rpm
+    {
+      setpointRPM=command.substring(5).toInt();
+      Serial.println("Fan1 setspeed " + String(setpointRPM) + " RPM");
+    }
+    else if(command.indexOf("fan2") == 0) //The command format must be fan2=xx.xx
     {
       _fan2Setpoint=command.substring(5).toDouble();
+      //Serial.println("Fan2 setspeed " + String(_fan2Setpoint));
     }
-     else if(command.equals("Quiet")) 
+    else if(command.equals("contest"))
+    {
+      contest = true;
+      start = false;
+      _Quiet = LOW;
+      _lastTrajSetpoint = 0;
+    }
+    else if(command.indexOf("traj") == 0) //The command format must be traj=<time>;<setpoint>
+    {
+      _lastTrajSetpoint = command.substring(21).toDouble();
+      Serial.println(command.substring(5,command.length()-1) + ";" + String(plotHeightPercent));
+    }
+     else if(command.equals("quiet")) 
     {
       _Quiet=!_Quiet;
     }
@@ -276,7 +326,6 @@ void user_Ctrl_Task()
   tExecUserTask = micros() - tTemp;
 }
 
-#define MONITOR 
 //#define PLOT_TIMINGS
 
 //monitoring_Task
@@ -284,23 +333,22 @@ void monitoring_Task()
 {
   tTemp = micros();
     
-#ifdef MONITOR
-  Serial.print ("cons_ext.:");
-  Serial.print (_externalSetpoint, 1);
-  Serial.print (",MainFanRpm:");
-  Serial.print (_mainFanSpeed, 0);
-  Serial.print (",SecondaryFanRpm:");
-  Serial.print (_secondaryFanSpeed, 0);
-  Serial.print (",setpointRPM:");
-  Serial.print (setpointRPM, DEC);
-  Serial.print (",realSetpoint:");
-  Serial.print (realSetpoint, DEC);
-  Serial.print (",HauteurCM:");
-  Serial.print (plotHeightCm,1);
-  Serial.print (",HauteurPercent:");
-  Serial.print (plotHeightPercent,1);
-  Serial.print ("\r\n");
-#endif
+  if(monitor)
+  {
+    Serial.print ("cons_ext.:");
+    Serial.print (_externalSetpoint, 1);
+    Serial.print (",MainFanRpm:");
+    Serial.print (_mainFanSpeed, 0);
+    Serial.print (",SecondaryFanRpm:");
+    Serial.print (_secondaryFanSpeed, 0);
+    Serial.print (",setpointRPM:");
+    Serial.print (setpointRPM, DEC);
+    Serial.print (",HauteurCM:");
+    Serial.print (plotHeightCm,1);
+    Serial.print (",HauteurPercent:");
+    Serial.print (plotHeightPercent,1);
+    Serial.print ("\r\n");
+  }
 
 #ifdef PLOT_TIMINGS
   Serial.println ("Application timings: ");
@@ -313,47 +361,28 @@ void monitoring_Task()
     tExecMonTask = micros() - tTemp;
 }
 
-void BLETask()
-{
-  if (central) {
-    if (central.connected()) {
-      if (fanSpeedCharacteristic.written()) {
-        int newFanSpeed = fanSpeedCharacteristic.value();
-        realSetpoint = mainFan.setSpeed(newFanSpeed);
-        Serial.print("Nouvelle vitesse du ventilateur principal : ");
-        Serial.println(newFanSpeed);
-      }
-    }
-  }
-  else
-  {
-    central = BLE.central();
-  }
-}
-
 #define SPEED_TASK_PERIOD_MS 43
 #define POS_TASK_PERIOD_MS 11
 #define MONITORING_TASK_PERIOD_MS 100
 
 //Calcul de la période de la tâche
-#define TIMER_TASK_US (SPEED_TASK_PERIOD_MS+POS_TASK_PERIOD_MS) //Périodes des tâches SPEED et POSITION convertit en microsecondes.
+#define TIMER_TASK_MS (SPEED_TASK_PERIOD_MS+POS_TASK_PERIOD_MS)
 
 // the soft timer object
 SimpleTimer timerTask;
 SimpleTimer timerMonitor;
+SimpleTimer timerSpeed;
 int counterHard=0;
 int counterSoft=0;
 
 void HandlerTickTask()
 {
   //No print inside these
-  speed_Ctrl_Task();
   position_Ctrl_Task();
 }
 
 void HandlerTickMonitor() {
   user_Ctrl_Task();
-
   monitoring_Task();
 }
 
@@ -370,12 +399,11 @@ void setup()
 
   setupFanInterrupts();
 
-  timerTask.setInterval(TIMER_TASK_US, HandlerTickTask); 
+  timerTask.setInterval(TIMER_TASK_MS, HandlerTickTask); 
   timerMonitor.setInterval(MONITORING_TASK_PERIOD_MS, HandlerTickMonitor);
+  timerSpeed.setInterval(SPEED_TASK_PERIOD_MS, speed_Ctrl_Task);
   
   Serial.begin(115200);
-
-  setupBLE();
 }
 
 void loop() 
@@ -385,4 +413,5 @@ void loop()
 
   timerTask.run();
   timerMonitor.run();
+  timerSpeed.run();
 }
