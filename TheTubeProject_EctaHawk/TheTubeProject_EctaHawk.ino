@@ -14,7 +14,7 @@
 float _fan2Setpoint=0.5;
 float _Quiet=LOW;
 int i=0;
-bool start = true;
+bool start = false;
 bool ramp = false;
 bool contest = false;
 bool pot = false;
@@ -29,7 +29,7 @@ float plotHeightCm;
 float plotHeightPercent;
 float HeightPercent;
 float _externalSetpoint;
-float _lastTrajSetpoint;
+float _lastTrajSetpoint = 0;
 
 long int tExecSpeedTask;
 long int tExecPosTask;
@@ -37,8 +37,13 @@ long int tExecUserTask;
 long int tExecMonTask;
 long int tTemp;
 
-double Kp = 10;
-double Ki = 0;
+//Constante pour la balle
+const double Ku = 50;
+const double Tu = 1.98;
+
+//Ziegler Nichols
+double Kp = 0.45*Ku;
+double Ki = (0.54*Ku)/Tu;
 double Kd = 0;
 
 #define MainFanEnablPin D2
@@ -183,6 +188,7 @@ void speed_Ctrl_Task()
     {
       if(regul_vitesse)
       {
+        //Serial.print("Ping");
         if(setpointRPM < 3500)
         {
           setpointRPM = 3500;
@@ -206,6 +212,9 @@ void speed_Ctrl_Task()
   tExecSpeedTask = micros() - tTemp;
 }
 
+float integral_pos = 0;
+float erreur_pos = 0;
+
 void position_Ctrl_Task()
 {
   tTemp = micros();
@@ -214,10 +223,12 @@ void position_Ctrl_Task()
   plotHeightPercent = HeightPercent;
   // Calcul de la distance en cm en utilisant l'équation de droite
   plotHeightCm = heightSensor.heightInCm(HeightPercent);
-  //Compute
+  //Régulation
+  erreur_pos = _lastTrajSetpoint - plotHeightCm;
+  integral_pos += erreur_pos;
   
   //Ouput
-
+  setpointRPM = Kp * erreur_pos + Ki * integral_pos;
   tExecPosTask = micros() - tTemp;
 }
 
@@ -234,6 +245,8 @@ void user_Ctrl_Task()
     if(command.equals("start"))
     {
       start = true;
+      _lastTrajSetpoint = heightSensor.heightInCm(HeightPercent);
+      integral_pos = 0;      
       Serial.println(start ? "Démarré" : "Arrêté");
     }
     else if(command.equals("inc"))
@@ -310,6 +323,11 @@ void user_Ctrl_Task()
       _Quiet = LOW;
       _lastTrajSetpoint = 0;
     }
+    else if(command.indexOf("setpoint") == 0) //The command format must be traj=<time>;<setpoint>
+    {
+      _lastTrajSetpoint = command.substring(9).toDouble();
+      Serial.println("Setpoint: " + String(_lastTrajSetpoint));
+    }
     else if(command.indexOf("traj") == 0) //The command format must be traj=<time>;<setpoint>
     {
       _lastTrajSetpoint = command.substring(21).toDouble();
@@ -350,6 +368,10 @@ void monitoring_Task()
     Serial.print (plotHeightCm,1);
     Serial.print (",HauteurPercent:");
     Serial.print (plotHeightPercent,1);
+    Serial.print (",Erreur de position:");
+    Serial.print (erreur_pos,1);
+    Serial.print (",SetpointPos:");
+    Serial.print (_lastTrajSetpoint,1);
     Serial.print ("\r\n");
   }
 
