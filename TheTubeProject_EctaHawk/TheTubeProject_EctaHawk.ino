@@ -57,6 +57,7 @@ double Kd = 0;
 #define HS_EchoPin D8
 
 #define MONITOR
+//#define BALLE
 //Debug
 
 FanManager mainFan(MainFanPWMPin,MainFanHallPin,MainFanEnablPin,MainFanCurrentPin);
@@ -213,7 +214,11 @@ void position_Ctrl_Task()
   HeightPercent = heightSensor.measureDistance();
   plotHeightPercent = HeightPercent;
   // Calcul de la distance en cm en utilisant l'équation de droite
+#ifdef BALLE  
   plotHeightCm = heightSensor.heightInCm(HeightPercent);
+#else
+  plotHeightCm = (heightSensor.heightInCm(HeightPercent)-2.3);
+#endif
   //Compute
   
   //Ouput
