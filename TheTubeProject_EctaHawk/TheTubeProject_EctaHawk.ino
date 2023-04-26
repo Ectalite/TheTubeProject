@@ -177,8 +177,14 @@ void speed_Ctrl_Task()
   {
     if(contest)
     {
-      mainFan.setSpeedProp(0);
-      secondaryFan.setSpeedProp(0);
+      if(setpointRPM < 3500)
+      {
+        setpointRPM = 3500;
+      }
+      int erreur = setpointRPM - _mainFanSpeed;
+      integral_speed += erreur;
+      int vitesse = 7 * erreur + 0.25 * integral_speed;
+      mainFan.setSpeed(vitesse);
     }
     else if(pot)
     {
