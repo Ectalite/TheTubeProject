@@ -38,13 +38,13 @@ long int tExecMonTask;
 long int tTemp;
 
 //Constante pour la balle
-const double Ku = 50;
-const double Tu = 1.98;
+const double Ku = 550;
+const double Tu = 2.3;
 
 //Ziegler Nichols
-double Kp = 0.45*Ku;
-double Ki = (0.54*Ku)/Tu;
-double Kd = 0;
+double Kp = 200;
+double Ki = 5;
+double Kd = 30;
 
 #define MainFanEnablPin D2
 #define MainFanPWMPin D3
