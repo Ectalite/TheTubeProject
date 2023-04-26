@@ -9,12 +9,12 @@ FanManager::FanManager(byte fanPWMPin, byte fanHallSensorPin, byte fanEnablePin,
   _fanEnablePin=fanEnablePin;
   _CurrentMeasPin=CurrentMeasPin;
 
-/*
   // set up the pwm object for PWMPin
-  pwm = new mbed::PwmOut(digitalPinToPinName(_fanPWMPin));
+  //pwm = new mbed::PwmOut(digitalPinToPinName(_fanPWMPin));
+  //pwm->period( 1.0 / PWM_FREQUENCY );
   // set the PWM period to PWMPeriod
-  pwm->period_us(PWMPeriod);
-*/
+  //pwm->period_us(PWMPeriod);
+  
   pinMode(_fanPWMPin, OUTPUT);
   
   _lastSpeedMeasurement = millis();
@@ -38,6 +38,7 @@ int FanManager::setSpeed(float speedRPM)
 
 void FanManager::setSpeedProp(float speedProp)
 {
+  //pwm->write(speedProp*255);
   analogWrite(_fanPWMPin, speedProp*255);
 }
  

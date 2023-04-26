@@ -5,6 +5,7 @@
 using namespace std;
 
 #define ANALOG_MAX 4096
+#define PWM_FREQUENCY 25000
 
 class FanManager
 {
