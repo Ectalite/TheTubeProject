@@ -18,7 +18,7 @@ bool start = false;
 bool ramp = false;
 bool contest = false;
 bool pot = false;
-bool monitor = true;
+bool monitor = false;
 bool regul_vitesse = true;
 int setpointRPM;
 String command;
@@ -38,13 +38,16 @@ long int tExecMonTask;
 long int tTemp;
 
 //Constante pour la balle
-const double Ku = 550;
-const double Tu = 2.3;
+const double Ku = 500;
+const double Tu = 1970;
 
 //Ziegler Nichols
-double Kp = 200;
-double Ki = 5;
-double Kd = 30;
+double Kp = 310;
+double Ki = 6;
+double Kd = 50;
+//double Kp = 500;
+//double Ki = 0;
+//double Kd = 0;
 
 #define MainFanEnablPin D2
 #define MainFanPWMPin D3
@@ -214,13 +217,16 @@ void speed_Ctrl_Task()
   }
 
   //Output
-  mainFan.enableRotation(!_Quiet);
-  secondaryFan.enableRotation(!_Quiet);
+  //mainFan.enableRotation(!_Quiet);
+  //secondaryFan.enableRotation(!_Quiet);
+  mainFan.enableRotation(true);
+  secondaryFan.enableRotation(true);
   tExecSpeedTask = micros() - tTemp;
 }
 
 float integral_pos = 0;
 float erreur_pos = 0;
+float prev_error = 0;
 
 void position_Ctrl_Task()
 {
@@ -238,8 +244,9 @@ void position_Ctrl_Task()
   erreur_pos = _lastTrajSetpoint - plotHeightCm;
   integral_pos += erreur_pos;
   
-  //Ouput
-  setpointRPM = Kp * erreur_pos + Ki * integral_pos;
+  //Output
+  setpointRPM = Kp * erreur_pos + Ki * integral_pos + Kd * (erreur_pos-prev_error);
+  prev_error = erreur_pos;
   tExecPosTask = micros() - tTemp;
 }
 
@@ -331,7 +338,7 @@ void user_Ctrl_Task()
     {
       contest = true;
       start = false;
-      _Quiet = LOW;
+      //_Quiet = LOW;
       _lastTrajSetpoint = 0;
     }
     else if(command.indexOf("setpoint") == 0) //The command format must be traj=<time>;<setpoint>
@@ -342,7 +349,7 @@ void user_Ctrl_Task()
     else if(command.indexOf("traj") == 0) //The command format must be traj=<time>;<setpoint>
     {
       _lastTrajSetpoint = command.substring(21).toDouble();
-      Serial.println(command.substring(5,command.length()-1) + ";" + String(plotHeightPercent));
+      Serial.println(command.substring(5,command.length()-1) + ";" + String(plotHeightCm));
     }
      else if(command.equals("quiet")) 
     {
@@ -350,7 +357,7 @@ void user_Ctrl_Task()
     }
     else
     {
-      Serial.println("Invalid command");
+      Serial.println("Invalid command: " + command);
     }
   }
 
