@@ -6,12 +6,14 @@
 #include "FanManager.h"
 #include "Potentiometer.h"
 #include "HCSR04.h"
+#include "PID_v1.h"
 #include <SimpleTimer.h>
 
 /*********************************************************
            INSTANCIATION DES PERIPHERIQUES
 **********************************************************/
 float _fan2Setpoint=0.5;
+float lowestPoint = 0;
 float _Quiet=LOW;
 int i=0;
 bool start = false;
@@ -20,16 +22,16 @@ bool contest = false;
 bool pot = false;
 bool monitor = false;
 bool regul_vitesse = true;
-int setpointRPM;
+double setpointRPM;
 String command;
 
 float _mainFanSpeed;
 float _secondaryFanSpeed;
-float plotHeightCm;
+double plotHeightCm;
 float plotHeightPercent;
 float HeightPercent;
 float _externalSetpoint;
-float _lastTrajSetpoint = 0;
+double _lastTrajSetpoint = 0;
 
 long int tExecSpeedTask;
 long int tExecPosTask;
@@ -42,12 +44,14 @@ const double Ku = 500;
 const double Tu = 1970;
 
 //Ziegler Nichols
-double Kp = 310;
-double Ki = 6;
-double Kd = 50;
+double Kp = 750;
+double Ki = 0;
+double Kd = 0;
 //double Kp = 500;
 //double Ki = 0;
 //double Kd = 0;
+
+PID myPID(&plotHeightCm, &setpointRPM, &_lastTrajSetpoint, Kp, Ki, Kd, DIRECT);
 
 #define MainFanEnablPin D2
 #define MainFanPWMPin D3
@@ -65,7 +69,7 @@ double Kd = 50;
 #define HS_EchoPin D8
 
 #define MONITOR
-//#define BALLE
+#define BALLE
 //Debug
 
 FanManager mainFan(MainFanPWMPin,MainFanHallPin,MainFanEnablPin,MainFanCurrentPin);
@@ -234,6 +238,10 @@ void position_Ctrl_Task()
   //Inputs
   HeightPercent = heightSensor.measureDistance();
   plotHeightPercent = HeightPercent;
+  if(plotHeightCm < lowestPoint)
+  {
+    plotHeightCm = lowestPoint;
+  }
   // Calcul de la distance en cm en utilisant l'équation de droite
 #ifdef BALLE  
   plotHeightCm = heightSensor.heightInCm(HeightPercent);
@@ -241,12 +249,7 @@ void position_Ctrl_Task()
   plotHeightCm = (heightSensor.heightInCm(HeightPercent)-2.3);
 #endif
   //Régulation
-  erreur_pos = _lastTrajSetpoint - plotHeightCm;
-  integral_pos += erreur_pos;
-  
-  //Output
-  setpointRPM = Kp * erreur_pos + Ki * integral_pos + Kd * (erreur_pos-prev_error);
-  prev_error = erreur_pos;
+  myPID.Compute();
   tExecPosTask = micros() - tTemp;
 }
 
@@ -263,7 +266,7 @@ void user_Ctrl_Task()
     if(command.equals("start"))
     {
       start = true;
-      _lastTrajSetpoint = heightSensor.heightInCm(HeightPercent);
+      lowestPoint = heightSensor.heightInCm(HeightPercent);
       integral_pos = 0;      
       Serial.println(start ? "Démarré" : "Arrêté");
     }
@@ -447,6 +450,8 @@ void setup()
   timerSpeed.setInterval(SPEED_TASK_PERIOD_MS, speed_Ctrl_Task);
   
   Serial.begin(115200);
+
+  myPID.SetMode(AUTOMATIC);
 }
 
 void loop() 
