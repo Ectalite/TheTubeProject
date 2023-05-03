@@ -42,9 +42,9 @@ const double Ku = 500;
 const double Tu = 1970;
 
 //Ziegler Nichols
-double Kp = 310;
-double Ki = 6;
-double Kd = 50;
+double Kp = 370;
+double Ki = 8;
+double Kd = 130;
 //double Kp = 500;
 //double Ki = 0;
 //double Kd = 0;
