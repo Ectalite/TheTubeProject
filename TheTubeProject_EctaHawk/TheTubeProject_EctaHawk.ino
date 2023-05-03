@@ -188,6 +188,7 @@ void speed_Ctrl_Task()
       integral_speed += erreur;
       int vitesse = 7 * erreur + 0.25 * integral_speed;
       mainFan.setSpeed(vitesse);
+      secondaryFan.setSpeedProp(_fan2Setpoint);
     }
     else if(pot)
     {
@@ -207,6 +208,7 @@ void speed_Ctrl_Task()
         integral_speed += erreur;
         int vitesse = 7 * erreur + 0.25 * integral_speed;
         mainFan.setSpeed(vitesse);
+        secondaryFan.setSpeedProp(_fan2Setpoint);
       }
       else
       {
@@ -242,6 +244,7 @@ void position_Ctrl_Task()
 #endif
   //Régulation
   erreur_pos = _lastTrajSetpoint - plotHeightCm;
+  
   integral_pos += erreur_pos;
   
   //Output
@@ -405,8 +408,8 @@ void monitoring_Task()
 }
 
 #define SPEED_TASK_PERIOD_MS 43
-#define POS_TASK_PERIOD_MS 11
-#define MONITORING_TASK_PERIOD_MS 100
+#define POS_TASK_PERIOD_MS 44
+#define MONITORING_TASK_PERIOD_MS 25
 
 //Calcul de la période de la tâche
 #define TIMER_TASK_MS (SPEED_TASK_PERIOD_MS+POS_TASK_PERIOD_MS)
