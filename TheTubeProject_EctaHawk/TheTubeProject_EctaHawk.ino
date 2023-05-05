@@ -14,7 +14,7 @@
 float _fan2Setpoint=0.5;
 float _Quiet=LOW;
 int i=0;
-bool start = false;
+bool start = true;
 bool ramp = false;
 bool contest = false;
 bool pot = false;
@@ -42,9 +42,9 @@ const double Ku = 500;
 const double Tu = 1970;
 
 //Ziegler Nichols
-double Kp = 370;
-double Ki = 8;
-double Kd = 130;
+double Kp = 400;
+double Ki = 11;
+double Kd = 60;
 //double Kp = 500;
 //double Ki = 0;
 //double Kd = 0;
@@ -167,6 +167,7 @@ int integral_speed = 0;
 
 void speed_Ctrl_Task()
 {
+  //Serial.print("Ping");
   tTemp = micros();
   _mainFanSpeed = mainFan.computeSpeedRPM();
   _secondaryFanSpeed = secondaryFan.computeSpeedRPM();
@@ -184,9 +185,9 @@ void speed_Ctrl_Task()
       {
         setpointRPM = 3500;
       }
-      int erreur = setpointRPM - _mainFanSpeed;
+      double erreur = setpointRPM - _mainFanSpeed;
       integral_speed += erreur;
-      int vitesse = 7 * erreur + 0.25 * integral_speed;
+      double vitesse = 7 * erreur + 0.25 * integral_speed;
       mainFan.setSpeed(vitesse);
       secondaryFan.setSpeedProp(_fan2Setpoint);
     }
@@ -204,9 +205,9 @@ void speed_Ctrl_Task()
         {
           setpointRPM = 3500;
         }
-        int erreur = setpointRPM - _mainFanSpeed;
+        double erreur = setpointRPM - _mainFanSpeed;
         integral_speed += erreur;
-        int vitesse = 7 * erreur + 0.25 * integral_speed;
+        double vitesse = 7 * erreur + 0.25 * integral_speed;
         mainFan.setSpeed(vitesse);
         secondaryFan.setSpeedProp(_fan2Setpoint);
       }
@@ -340,9 +341,8 @@ void user_Ctrl_Task()
     else if(command.equals("contest"))
     {
       contest = true;
-      start = false;
-      //_Quiet = LOW;
-      _lastTrajSetpoint = 0;
+      start = true;
+      _Quiet = LOW;
     }
     else if(command.indexOf("setpoint") == 0) //The command format must be traj=<time>;<setpoint>
     {
